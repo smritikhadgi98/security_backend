@@ -27,7 +27,6 @@ const createProduct = async (req, res) => {
         const newProduct = new productModel({
             productName,
             productCategory,
-          
             productPrice,
             productDescription,
             productQuantity,
