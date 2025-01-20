@@ -8,90 +8,80 @@ const fs = require('fs');
 
 
 // Function to create a new user
-const createUser = async (req, res) => {
-  console.log(req.body);
+const { body, validationResult } = require('express-validator');
+// Password validation regex: 
+// Minimum 8 characters, at least 1 uppercase letter, 1 lowercase letter, and 1 special character
+const passwordValidationRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
-  const { userName, email, password, phone } = req.body;
-
-  if (!userName || !email || !password || !phone) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please enter all details!'
-    });
-  }
-
-  try {
-    const existingUser = await userModel.findOne({ email });
-
-    if (existingUser) {
-      return res.status(409).json({
+const createUser = [
+  body('userName').notEmpty().withMessage('User name is required'),
+  body('email').isEmail().withMessage('Invalid email format'),
+  body('password')
+    .matches(passwordValidationRegex).withMessage('Password must be at least 8 characters long, and include at least one uppercase letter, one lowercase letter, one number, and one special character'),
+  body('phone').notEmpty().withMessage('Phone number is required'),
+  
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
         success: false,
-        message: 'User Already Exists!'
+        message: 'Validation error',
+        errors: errors.array(),
       });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const { userName, email, password, phone } = req.body;
 
-    const newUser = new userModel({
-      userName,
-      email,
-      password: hashedPassword,
-      phone,
-      isAdmin: false // Default to false for new users
-    });
+    try {
+      const existingUser = await userModel.findOne({ email });
+      if (existingUser) {
+        return res.status(409).json({ success: false, message: 'User Already Exists!' });
+      }
 
-    await newUser.save();
+      const salt = await bcrypt.genSalt(12);
+      const hashedPassword = await bcrypt.hash(password, salt);
 
-    res.status(200).json({
-      success: true,
-      message: 'User Created Successfully'
-    });
+      const newUser = new userModel({
+        userName,
+        email,
+        password: hashedPassword,
+        phone,
+        isAdmin: false
+      });
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal Server Error!'
-    });
+      await newUser.save();
+
+      res.status(200).json({ success: true, message: 'User Created Successfully' });
+
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Internal Server Error' });
+    }
   }
-};
+];
 
-// Function to handle user login
 const loginUser = async (req, res) => {
-  console.log(req.body);
-
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please enter all the fields'
-    });
+    return res.status(400).json({ success: false, message: 'Please enter all the fields' });
   }
 
   try {
     const user = await userModel.findOne({ email });
-
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User Does Not Exist!'
-      });
+      return res.status(404).json({ success: false, message: 'User Does Not Exist!' });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password);
-
     if (!isValidPassword) {
-      return res.status(401).json({
-        success: false,
-        message: 'Password Does Not Match!'
-      });
+      return res.status(401).json({ success: false, message: 'Password Does Not Match!' });
     }
 
     const token = jwt.sign(
       { id: user._id, isAdmin: user.isAdmin },
       process.env.JWT_SECRET,
+      { expiresIn: '1h' }
     );
 
     res.status(200).json({
@@ -103,18 +93,17 @@ const loginUser = async (req, res) => {
         userName: user.userName,
         email: user.email,
         phone: user.phone,
-        isAdmin: user.isAdmin // Ensure isAdmin field is included
+        isAdmin: user.isAdmin
       }
     });
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal Server Error'
-    });
+    return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
+
+// Function to handle user login
 
 // Function to generate a new token
 const getToken = async (req, res) => {
@@ -250,6 +239,8 @@ const forgotPassword = async (req, res) => {
     });
   }
 };
+
+
 
 const verifyOtpAndResetPassword = async (req, res) => {
   const { phone, otp, password } = req.body;
