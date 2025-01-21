@@ -7,7 +7,7 @@ const { authGuard, adminGuard } = require('../middleware/authGuard');
 router.post('/create', userController.createUser);
 
 // Creating user login route
-router.post('/login', userController.loginUser);
+router.post('/login', userController.verifyRecaptcha, userController.loginUser);
 
 // Route to generate token
 router.post('/token', userController.getToken);
@@ -24,6 +24,15 @@ router.post('/profile_picture', userController.uploadProfilePicture);
 
 // update user details
 router.put('/update', authGuard, userController.editUserProfile);
+
+//verify login otp
+router.post('/verify_login_otp',userController.loginOtp)
+
+router.post('/resend_login_otp',userController.resendLoginOtp)
+
+router.post('/verify_register_otp',userController.verifyRegisterOtp)
+
+
 
 
 
