@@ -99,8 +99,36 @@ const loginUser = async (req, res) => {
       return res.status(404).json({ success: false, message: 'User Does Not Exist!' });
     }
 
+    // Check if the user is locked out
+    if (user.failedLoginAttempts >= 5) {
+      const lockoutTime = user.lockoutTime ? new Date(user.lockoutTime) : null;
+      const currentTime = Date.now();
+      
+      // Check if lockout period is still active (15 minutes)
+      if (lockoutTime && currentTime < lockoutTime.getTime()) {
+        return res.status(403).json({
+          success: false,
+          message: `Your account is locked. Please try again after 15 minutes.`
+        });
+      } else {
+        // Reset failed attempts and lockout time if lockout period has passed
+        user.failedLoginAttempts = 0;
+        user.lockoutTime = null;
+        await user.save();
+      }
+    }
+
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
+      // Increment failed login attempts
+      user.failedLoginAttempts += 1;
+      
+      if (user.failedLoginAttempts >= 5) {
+        // Lock the account for 15 minutes
+        user.lockoutTime = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes lockout
+      }
+      await user.save();
+
       return res.status(401).json({ success: false, message: 'Password Does Not Match!' });
     }
 
@@ -166,7 +194,6 @@ const loginUser = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
-
 
 const loginOtp = async (req, res) => {
   const { email, otp } = req.body;

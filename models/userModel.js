@@ -57,6 +57,16 @@ const userSchema = new mongoose.Schema({
     profilePicture: {
         type: String,
     },
+
+    // Fields for failed login attempts and account lockout
+    failedLoginAttempts: {
+        type: Number,
+        default: 0
+    },
+    lockoutTime: {
+        type: Date,
+        default: null
+    },
 });
 
 const User = mongoose.model('User', userSchema);
