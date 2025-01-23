@@ -9,9 +9,9 @@ const wishlistController = require("../controllers/wishlistControllers");
 router.post('/add', authGuard,wishlistController.addToWishlist);
 
 // Route to remove a product from the wishlist
-router.post('/remove', authGuard,wishlistController.removeFromWishlist);
+router.post('/remove', authGuard, wishlistController.removeFromWishlist);
 
 // Route to get all products in the wishlist
-router.get('/:userId',authGuard, wishlistController.getWishlist);
+router.get('/get_wishlist',authGuard, wishlistController.getWishlist);
 
 module.exports = router;

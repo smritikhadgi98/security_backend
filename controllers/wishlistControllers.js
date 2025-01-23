@@ -2,98 +2,120 @@ const mongoose = require('mongoose');
 const User = require('../models/userModel');
 const Product = require('../models/productModel');
 const Wishlist = require('../models/wishlistModel');
+const path = require("path");
 
 const addToWishlist = async (req, res) => {
-    const { userId, productId } = req.body;
-
-    if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(productId)) {
-        return res.status(400).json({ success: false, message: 'Invalid User or Product ID' });
-    }
+    console.log(req.body);
+    const { productId, quantity } = req.body;
+    const id = req.user.id;
+    console.log(id);
 
     try {
-        const user = await User.findById(userId);
+        const user = await User.findById(id);
         if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
+            return res.status(404).json({
+                success: false,
+                message: "User not found!",
+            });
         }
-
-        const product = await Product.findById(productId);
-        if (!product) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
+        const existingProduct = await Wishlist.findOne({
+            productId: productId,
+            userId: id,
+           
+        });
+        if (existingProduct) {
+            return res.json({
+                success: false,
+                message: "Product already in wishlist!",
+            });
         }
+        const wishlist = new Wishlist({
+            productId: productId,
+            userId: id,
+        
+        });
 
-        let wishlist = await Wishlist.findOne({ user: userId });
-        if (!wishlist) {
-            wishlist = new Wishlist({ user: userId, products: [] });
-        }
+        await wishlist.save();
 
-        if (!wishlist.products.includes(productId)) {
-            wishlist.products.push(productId);
-            await wishlist.save();
-            return res.status(200).json({ success: true, message: 'Product added to wishlist' });
-        }
-
-        return res.status(400).json({ success: false, message: 'Product already in wishlist' });
+        res.status(201).json({
+            success: true,
+            message: "Product added to wishlist successfully!",
+        });
     } catch (error) {
-        console.error('Error adding to wishlist:', error.message);
-        return res.status(500).json({ success: false, message: 'Server Error' });
+        console.log(error);
+        res.status(500).json({
+            success: false,
+            message: "Internal Server Error!",
+        });
     }
 };
 
 const removeFromWishlist = async (req, res) => {
-    const { userId, productId } = req.body;
-
-    if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(productId)) {
-        return res.status(400).json({ success: false, message: 'Invalid User or Product ID' });
-    }
-
+    const { id } = req.body;
+    const userId = req.user.id;
+  
     try {
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-
-        const wishlist = await Wishlist.findOne({ user: userId });
-        if (!wishlist) {
-            return res.status(404).json({ success: false, message: 'Wishlist not found' });
-        }
-
-        const index = wishlist.products.indexOf(productId);
-        if (index === -1) {
-            return res.status(404).json({ success: false, message: 'Product not found in wishlist' });
-        }
-
-        wishlist.products.splice(index, 1);
-        await wishlist.save();
-
-        return res.status(200).json({ success: true, message: 'Product removed from wishlist' });
+      const existingWishlistItem = await Wishlist.findOne({ 
+        _id: id, 
+        userId: userId 
+      });
+  
+      if (!existingWishlistItem) {
+        return res.status(404).json({
+          success: false,
+          message: "Product not found in your wishlist!"
+        });
+      }
+  
+      await Wishlist.findByIdAndDelete(id);
+  
+      res.status(200).json({
+        success: true,
+        message: "Product removed from wishlist successfully!"
+      });
+  
     } catch (error) {
-        console.error('Error removing from wishlist:', error.message);
-        return res.status(500).json({ success: false, message: 'Server Error' });
+      console.error('Remove from Wishlist Error:', error);
+      res.status(500).json({
+        success: false,
+        message: "Internal Server Error!"
+      });
     }
-};
-
+  };
 const getWishlist = async (req, res) => {
-    const { userId } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-        return res.status(400).json({ success: false, message: 'Invalid User ID' });
-    }
-
+    const id = req.user.id;
+    console.log('User ID:', id); // Log user ID
+  
     try {
-        const wishlist = await Wishlist.findOne({ user: userId }).populate('products');
-        if (!wishlist) {
-            return res.status(404).json({ success: false, message: 'Wishlist not found' });
-        }
-
-        return res.status(200).json({ success: true, wishlist: wishlist.products });
+      const wishlistItems = await Wishlist
+        .find({ userId: id })
+        .populate({
+          path: 'productId',
+          select: 'productName productPrice productImage' // Specify fields to populate
+        });
+  
+      console.log('Wishlist Items:', wishlistItems);
+      console.log('Wishlist Items Count:', wishlistItems.length);
+  
+      res.status(200).json({
+        success: true,
+        products: wishlistItems,
+        message: "Wishlist items fetched successfully!"
+      });
     } catch (error) {
-        console.error('Error getting wishlist:', error.message);
-        return res.status(500).json({ success: false, message: 'Server Error' });
+      console.error('Wishlist Fetch Error:', error);
+      res.status(500).json({
+        success: false,
+        message: "Internal Server Error!"
+      });
     }
-};
-
+  };
 module.exports = {
     addToWishlist,
     removeFromWishlist,
     getWishlist
 };
+
+
+
+
