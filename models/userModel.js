@@ -24,6 +24,16 @@ const userSchema = new mongoose.Schema({
         default: false
     },
 
+    // Email verification OTP fields
+    verificationOTP: {
+        type: String,
+        default: null
+    },
+    otpExpires: {
+        type: Date,
+        default: null
+    },
+
     // Login OTP fields
     loginOTP: {
         type: String,
@@ -47,7 +57,6 @@ const userSchema = new mongoose.Schema({
     profilePicture: {
         type: String,
     },
-
 });
 
 const User = mongoose.model('User', userSchema);

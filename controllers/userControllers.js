@@ -6,6 +6,8 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const {sendLoginOTP}= require('../service/authentication')
+const { sendVerificationEmail } = require('../service/authentication');
+const crypto = require('crypto');
 
 
 
@@ -20,9 +22,12 @@ const createUser = [
   body('userName').notEmpty().withMessage('User name is required'),
   body('email').isEmail().withMessage('Invalid email format'),
   body('password')
-    .matches(passwordValidationRegex).withMessage('Password must be at least 8 characters long, and include at least one uppercase letter, one lowercase letter, one number, and one special character'),
+    .matches(passwordValidationRegex)
+    .withMessage(
+      'Password must be at least 8 characters long, and include at least one uppercase letter, one lowercase letter, one number, and one special character'
+    ),
   body('phone').notEmpty().withMessage('Phone number is required'),
-  
+
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -36,31 +41,49 @@ const createUser = [
     const { userName, email, password, phone } = req.body;
 
     try {
+      // Check if the user already exists
       const existingUser = await userModel.findOne({ email });
       if (existingUser) {
         return res.status(409).json({ success: false, message: 'User Already Exists!' });
       }
 
+      // Hash the password
       const salt = await bcrypt.genSalt(12);
       const hashedPassword = await bcrypt.hash(password, salt);
 
+      // Generate OTP and expiration time
+      const otp = crypto.randomInt(100000, 999999).toString(); // 6-digit OTP
+      const otpExpires = Date.now() + 10 * 60 * 1000; // 10 minutes from now
+
+      // Create a new user
       const newUser = new userModel({
         userName,
         email,
         password: hashedPassword,
         phone,
-        isAdmin: false
+        isAdmin: false,
+        isVerified: false,
+        verificationOTP: otp,
+        otpExpires,
       });
 
       await newUser.save();
 
-      res.status(200).json({ success: true, message: 'User Created Successfully' });
+      // Send the verification email
+      const emailSent = await sendVerificationEmail(email, otp);
+      if (!emailSent) {
+        return res.status(500).json({ success: false, message: 'Failed to send verification email' });
+      }
 
+      res.status(200).json({
+        success: true,
+        message: 'User created successfully. Please verify your email to activate your account.',
+      });
     } catch (error) {
       console.error(error);
       res.status(500).json({ success: false, message: 'Internal Server Error' });
     }
-  }
+  },
 ];
 
 const loginUser = async (req, res) => {
@@ -81,65 +104,60 @@ const loginUser = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Password Does Not Match!' });
     }
 
-    // Debugging Logs
-    console.log("Stored OTP:", user.loginOTP);
-    console.log("Stored OTP Expiry:", user.loginOTPExpires);
-    console.log("Received OTP:", otp);
-    console.log("Current Time:", new Date());
-
-    // If OTP is required but not provided, generate a new OTP
     if (!otp) {
-      if (user.loginOTP && user.loginOTPExpires > new Date()) {
-        return res.status(200).json({
-          success: true,
-          message: "OTP already sent. Please check your email.",
-          requireOTP: true,
-        });
-      }
-
-      const loginOTP = (Math.floor(100000 + Math.random() * 900000)).toString();
+      const loginOTP = Math.floor(100000 + Math.random() * 900000).toString();
       const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
 
       user.loginOTP = loginOTP;
       user.loginOTPExpires = otpExpiry;
       await user.save();
 
+      // Send OTP email
       const emailSent = await sendLoginOTP(email, loginOTP);
+
       if (!emailSent) {
-        return res.status(500).json({ success: false, message: "Failed to send OTP" });
+        return res.status(500).json({
+          success: false,
+          message: "Failed to send OTP",
+        });
       }
 
-      return res.status(200).json({ success: true, message: "OTP sent to your email", requireOTP: true });
-    }
-
-    // Fetch fresh user data before OTP verification
-    const freshUser = await userModel.findOne({ email });
-    if (!freshUser) {
-      return res.status(404).json({ success: false, message: 'User Not Found!' });
+      return res.status(200).json({
+        success: true,
+        message: "OTP sent to your email",
+        requireOTP: true,
+      });
     }
 
     // Verify OTP
-    if (freshUser.loginOTP !== otp || freshUser.loginOTPExpires < new Date()) {
-      return res.status(400).json({ success: false, message: "Invalid or expired OTP" });
+    if (user.loginOTP !== otp || user.loginOTPExpires.getTime() < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired OTP",
+      });
     }
 
     // Clear OTP after successful verification
-    freshUser.loginOTP = null;
-    freshUser.loginOTPExpires = null;
-    await freshUser.save();
+    user.loginOTP = null;
+    user.loginOTPExpires = null;
+    await user.save();
 
-    const token = jwt.sign({ id: freshUser._id, isAdmin: freshUser.isAdmin }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(
+      { id: user._id, isAdmin: user.isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
 
     res.status(200).json({
       success: true,
       message: 'User Logged In Successfully!',
       token,
       userData: {
-        id: freshUser._id,
-        userName: freshUser.userName,
-        email: freshUser.email,
-        phone: freshUser.phone,
-        isAdmin: freshUser.isAdmin
+        id: user._id,
+        userName: user.userName,
+        email: user.email,
+        phone: user.phone,
+        isAdmin: user.isAdmin
       }
     });
 
@@ -148,6 +166,7 @@ const loginUser = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
+
 
 const loginOtp = async (req, res) => {
   const { email, otp } = req.body;
