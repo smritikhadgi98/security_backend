@@ -604,8 +604,6 @@ const verifyRecaptcha = async (req, res, next) => {
  
 
 const uploadProfilePicture = async (req, res) => {
-  // const id = req.user.id;
-  console.log(req.files);
   const { profilePicture } = req.files;
 
   if (!profilePicture) {
@@ -615,25 +613,38 @@ const uploadProfilePicture = async (req, res) => {
     });
   }
 
-  //  Upload the image
-  // 1. Generate new image name
+  // Check the file type (only allow .png and .jpg)
+  const fileExtension = path.extname(profilePicture.name).toLowerCase();
+  if (fileExtension !== '.png' && fileExtension !== '.jpg' && fileExtension !== '.jpeg') {
+    return res.status(400).json({
+      success: false,
+      message: 'Only PNG and JPG files are allowed',
+    });
+  }
+
+  // Ensure JavaScript files are never accepted
+  if (fileExtension === '.js') {
+    return res.status(400).json({
+      success: false,
+      message: 'JavaScript files are not allowed',
+    });
+  }
+
+  // Generate a new image name
   const imageName = `${Date.now()}-${profilePicture.name}`;
 
-  // 2. Make a upload path (/path/upload - directory)
-  const imageUploadPath = path.join(
-    __dirname,
-    `../public/profile_pictures/${imageName}`
-  );
+  // Make an upload path (/path/upload - directory)
+  const imageUploadPath = path.join(__dirname, `../public/profile_pictures/${imageName}`);
 
   // Ensure the directory exists
   const directoryPath = path.dirname(imageUploadPath);
   fs.mkdirSync(directoryPath, { recursive: true });
 
   try {
-    // 3. Move the image to the upload path
+    // Move the image to the upload path
     profilePicture.mv(imageUploadPath);
 
-    //  send image name to the user
+    // Send the image name to the user
     res.status(200).json({
       success: true,
       message: 'Image uploaded successfully',
@@ -648,7 +659,6 @@ const uploadProfilePicture = async (req, res) => {
     });
   }
 };
-
 
 // edit user profile
 const editUserProfile = async (req, res) => {
