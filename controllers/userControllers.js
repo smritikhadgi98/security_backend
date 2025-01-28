@@ -8,8 +8,10 @@ const axios = require('axios');
 const {sendLoginOTP}= require('../service/authentication')
 const { sendVerificationEmail } = require('../service/authentication');
 const crypto = require('crypto');
-
-
+const validator= require('validator')
+const sanitizeInput = (input) => {
+  return validator.escape(input.trim());
+};
 
 
 // Function to create a new user
@@ -406,51 +408,57 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
-const forgotPassword = async (req, res) => {
-  const { phone } = req.body;
 
-  if (!phone) {
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+ 
+  // Sanitize phone number input
+  const sanitizedEmail = email ? sanitizeInput(email) : null;
+ 
+  if (!sanitizedEmail) {
     return res.status(400).json({
       success: false,
       message: "Please enter your phone number",
     });
   }
-
+ 
   try {
     // Finding user by phone number
-    const user = await userModel.findOne({ phone: phone });
+    const user = await userModel.findOne({ email: sanitizedEmail });
     if (!user) {
       return res.status(400).json({
         success: false,
         message: "User not found",
       });
     }
-
-    // Generate OTP random 6 digit number
+ 
+    // Generate a random 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000);
-    const expiry = Date.now() + 10 * 60 * 1000; // OTP expiry time
-
-    // Save to database for verification
+ 
+    // Set expiry time for OTP (10 minutes from now)
+    const expiry = Date.now() + 10 * 60 * 1000;
+ 
+    // Save OTP and expiry to database for verification
     user.resetPasswordOTP = otp;
     user.resetPasswordExpires = expiry;
     await user.save();
-
-    // Send OTP to registered phone number
-    const isSent = await sendOtp(phone, otp); // Ensure this function works and returns appropriate result
+ 
+    // Send OTP to the registered phone number
+    const isSent = await sendOtp(sanitizedEmail, otp);
     if (!isSent) {
-      return res.status(500).json({
+      return res.status(400).json({
         success: false,
-        message: 'Error sending OTP'
+        message: "Error sending OTP",
       });
     }
-
+ 
+    // If successful
     res.status(200).json({
       success: true,
-      message: "OTP sent successfully"
+      message: "OTP sent successfully",
     });
-
   } catch (error) {
-    console.error('Error in forgotPassword:', error); // Log error for debugging
+    console.error("Error in forgotPassword:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -459,35 +467,34 @@ const forgotPassword = async (req, res) => {
 };
 
 
-
 const verifyOtpAndResetPassword = async (req, res) => {
-  const { phone, otp, password } = req.body;
-
-  if (!phone || !otp || !password) {
+  const { email, otp, password } = req.body;
+ 
+  if (!email || !otp || !password) {
     return res.status(400).json({
       success: false,
       message: "Please enter all fields",
     });
   }
-
+ 
   try {
-    const user = await userModel.findOne({ phone: phone });
-
+    const user = await userModel.findOne({ email: email });
+ 
     if (!user) {
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
         message: "User not found",
       });
     }
-
+ 
     // Verify OTP
-    if (user.resetPasswordOTP !== otp) {
+    if (user.resetPasswordOTP!== (otp)) {
       return res.status(400).json({
         success: false,
         message: "Invalid OTP",
       });
     }
-
+ 
     // Check if OTP is expired
     if (user.resetPasswordExpires < Date.now()) {
       return res.status(400).json({
@@ -495,32 +502,82 @@ const verifyOtpAndResetPassword = async (req, res) => {
         message: "OTP expired",
       });
     }
-
+ 
+    // Check if the new password matches any in the history
+    for (const oldPasswordHash of user.passwordHistory) {
+      const isPasswordReused = await bcrypt.compare(password, oldPasswordHash);
+      if (isPasswordReused) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "New password cannot be the same as any previously used passwords",
+        });
+      }
+    }
+ 
     // Hash the new password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Update user password
+ 
+    // Update password and password history
+    user.passwordHistory.push(user.password); // Add current password to history
+    if (user.passwordHistory.length > 5) {
+      user.passwordHistory.shift(); // Keep only the last 5 passwords
+    }
+ 
     user.password = hashedPassword;
-    user.resetPasswordOTP = undefined; // Clear OTP
-    user.resetPasswordExpires = undefined; // Clear OTP expiry
+    user.resetPasswordOTP = null; // Clear OTP
+    user.resetPasswordExpires = null; // Clear OTP expiry
     await user.save();
-
+ 
     res.status(200).json({
       success: true,
       message: "Password reset successfully",
     });
-
   } catch (error) {
-    console.error('Error in verifyOtpAndResetPassword:', error); // Log error for debugging
-    return res.status(500).json({
+    console.error("Error in verifyOtpAndResetPassword:", error);
+    res.status(500).json({
       success: false,
       message: "Internal server error",
     });
   }
-}
+};
 
-
+const getPasswordHistory = async (req, res) => {
+  const { email } = req.body;
+ 
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      message: "email is required",
+    });
+  }
+ 
+  try {
+    // Find the user by phone number
+    const user = await userModel.findOne({ email }).select("passwordHistory");
+ 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+ 
+    // Respond with the password history
+    res.status(200).json({
+      success: true,
+      passwordHistory: user.passwordHistory,
+    });
+  } catch (error) {
+    console.error("Error fetching password history:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+ 
 
 const verifyRecaptcha = async (req, res, next) => {
   console.log("Incoming reCAPTCHA Token: ", req.body.recaptchaToken); // Log the token received in the request body
@@ -715,6 +772,7 @@ module.exports = {
   verifyRecaptcha,
   resendLoginOtp,
   verifyRegisterOtp,
-  loginOtp
+  loginOtp,
+  getPasswordHistory
 
 };

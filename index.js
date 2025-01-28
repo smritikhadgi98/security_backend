@@ -7,7 +7,7 @@ const cors = require('cors');
 const fileUpload = require('express-fileupload');
 const fs= require('fs');
 const path =require('path');
-const expSanitize=require("express-mongo-sanitize");
+const mongoSanitize=require("express-mongo-sanitize");
 
 
 
@@ -32,7 +32,9 @@ const options={
 }
 
 
-// app.use(expSanitize);
+app.use(mongoSanitize());
+
+
 app.use(cors(corsOptions));
 
 // Express JSON and file upload configuration
@@ -66,6 +68,7 @@ app.use('/api/wishlist', require('./routes/wishlistRoutes'));
 app.use('/api/review', require('./routes/ratingRoutes'))
 app.use('/api/order', require('./routes/orderRoutes'))
 app.use("/api/khalti", require('./routes/paymentRoutes'));
+app.use("/api/logs", require('./routes/activityRoutes'));
 
 
 // Starting the server

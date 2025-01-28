@@ -33,7 +33,11 @@ router.post('/resend_login_otp',userController.resendLoginOtp)
 
 router.post('/verify_register_otp',userController.verifyRegisterOtp)
 
-
+router.post(
+    "/get-password-history",
+   
+    userController.getPasswordHistory
+  );
 
 
 

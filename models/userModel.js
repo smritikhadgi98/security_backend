@@ -67,6 +67,11 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+
+    passwordHistory:{
+        type: [String],
+        default:[],
+    }
 });
 
 const User = mongoose.model('User', userSchema);
