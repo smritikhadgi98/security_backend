@@ -32,7 +32,7 @@ const options={
 }
 
 
-app.use(expSanitize);
+// app.use(expSanitize);
 app.use(cors(corsOptions));
 
 // Express JSON and file upload configuration
