@@ -9,7 +9,7 @@ const fs= require('fs');
 const path =require('path');
 const expSanitize=require("express-mongo-sanitize");
 
-app.use(expSanitize);
+
 
 const https=require('https');
 
@@ -32,7 +32,7 @@ const options={
 }
 
 
-
+app.use(expSanitize);
 app.use(cors(corsOptions));
 
 // Express JSON and file upload configuration
