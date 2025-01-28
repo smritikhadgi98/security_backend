@@ -7,6 +7,9 @@ const cors = require('cors');
 const fileUpload = require('express-fileupload');
 const fs= require('fs');
 const path =require('path');
+const expSanitize=require("express-mongo-sanitize");
+
+app.use(expSanitize);
 
 const https=require('https');
 

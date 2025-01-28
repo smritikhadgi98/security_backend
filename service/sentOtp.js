@@ -1,38 +1,5 @@
 
-// const axios = require('axios');
- 
-// let isSent = false;
-// const sendOtp = async (phone, otp) => {
-//     const url =
-//     'https://api.managepoint.co/api/sms/send'
- 
-//     // payload to send
-//     const payload = {
-//         apiKey: '37d6f71e-884e-4636-8b4e-ee4edd0eb6ef',
-//         to : phone,
-//         message: `Your OTP is ${otp}`
-//     }
- 
-//     // setting state
-//    try{
-//     const res = await axios.post(url, payload);
-//     if(res.status===2000){
-//         isSent = true;
- 
-//     }
- 
- 
-//    }catch(error){
-//        console.log('Error in sending otp', error.message);
-//    }
- 
-//    return isSent;
- 
- 
- 
-// }
- 
-// module.exports = sendOtp;
+
 
 
 const axios = require('axios');
